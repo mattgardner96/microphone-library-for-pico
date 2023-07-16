@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "pio.h": "c",
+        "usb_microphone.h": "c",
+        "tusb.h": "c"
+    }
+}

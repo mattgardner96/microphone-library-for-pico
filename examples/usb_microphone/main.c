@@ -17,11 +17,29 @@
 #include "usb_microphone.h"
 
 // configuration
-const struct pdm_microphone_config config = {
+const struct pdm_microphone_config config0 = {
   .gpio_data = 2,
   .gpio_clk = 3,
   .pio = pio0,
   .pio_sm = 0,
+  .sample_rate = SAMPLE_RATE,
+  .sample_buffer_size = SAMPLE_BUFFER_SIZE,
+};
+
+const struct pdm_microphone_config config1 = {
+  .gpio_data = 4,
+  .gpio_clk = 5,
+  .pio = pio0,
+  .pio_sm = 1,
+  .sample_rate = SAMPLE_RATE,
+  .sample_buffer_size = SAMPLE_BUFFER_SIZE,
+};
+
+const struct pdm_microphone_config config2 = {
+  .gpio_data = 6,
+  .gpio_clk = 7,
+  .pio = pio0,
+  .pio_sm = 2,
   .sample_rate = SAMPLE_RATE,
   .sample_buffer_size = SAMPLE_BUFFER_SIZE,
 };
@@ -36,7 +54,7 @@ void on_usb_microphone_tx_ready();
 int main(void)
 {
   // initialize and start the PDM microphone
-  pdm_microphone_init(&config);
+  pdm_microphone_init(&config0);
   pdm_microphone_set_samples_ready_handler(on_pdm_samples_ready);
   pdm_microphone_start();
 
