@@ -7,18 +7,16 @@
  * rate of 8 kHz and prints the sample values over the USB serial
  * connection.
  */
-#define PICO_DEFAULT_UART_BAUD_RATE 2000000
+
 #include <stdio.h>
 #include <string.h>
-#include <inttypes.h>
 
 #include "pico/stdlib.h"
 #include "pico/pdm_microphone.h"
 #include "tusb.h"
-#define SAMPLE_RATE 80000
-#define SAMPLE_BUFFER_SIZE SAMPLE_RATE/100
-#define SAMPLES_OVER_THRESH 10
-#define SAMPLES_THRESH 10000
+
+#define BUFFER_SIZE 256
+
 // configuration
 const struct pdm_microphone_config config = {
     // GPIO pin for the PDM DAT signal
@@ -34,34 +32,41 @@ const struct pdm_microphone_config config = {
     .pio_sm = 0,
 
     // sample rate in Hz
-    .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
+    .sample_rate = 8000,
 
     // number of samples to buffer
-    .sample_buffer_size = SAMPLE_BUFFER_SIZE,
+    .sample_buffer_size = BUFFER_SIZE,
 };
 
-
-// get time from internal clock in us
-uint64_t get_time_us()
-{
-    return to_us_since_boot(get_absolute_time());
-}
-
 // variables
-int16_t sample_buffer[SAMPLE_BUFFER_SIZE];
+int16_t sample_buffer[BUFFER_SIZE];
 volatile int samples_read = 0;
 
 void on_pdm_samples_ready()
 {
     // callback from library when all the samples in the library
     // internal sample buffer are ready for reading 
-    samples_read = pdm_microphone_read(sample_buffer, SAMPLE_BUFFER_SIZE);
+    samples_read = pdm_microphone_read(sample_buffer, BUFFER_SIZE);
 }
-void software_reset()
-{
-    watchdog_enable(1, 1);
-    while(1);
+
+int16_t moving_average(int16_t *data, int window_size);
+
+int16_t moving_average(int16_t *data, int window_size) {
+  int16_t filtered_data[window_size];
+  for (int i = 0; i < window_size; i++) {
+    int sum = 0;
+    for (int j = 0; j <= i; j++) {
+      if (i - j >= 0) {
+        sum += data[i - j];
+      }
+    }
+    filtered_data[i] = sum / (i + 1);
+  }
+
+  // Return the filtered data.
+  return filtered_data;
 }
+
 
 int main( void )
 {
@@ -76,7 +81,7 @@ int main( void )
     // initialize the PDM microphone
     if (pdm_microphone_init(&config) < 0) {
         printf("PDM microphone initialization failed!\n");
-        software_reset();
+        while (1) { tight_loop_contents(); }
     }
 
     // set callback that is called when all the samples in the library
@@ -86,10 +91,9 @@ int main( void )
      // start capturing data from the PDM microphone
     if (pdm_microphone_start() < 0) {
         printf("PDM microphone start failed!\n");
-        software_reset();
+        while (1) { tight_loop_contents(); }
     }
-    int num_over = 0;
-    bool printed = false;
+
     while (1) {
         // wait for new samples
         while (samples_read == 0) { tight_loop_contents(); }
@@ -97,28 +101,20 @@ int main( void )
         // store and clear the samples read from the callback
         int sample_count = samples_read;
         samples_read = 0;
-        // printf("Got %d samples\n",sample_count);
-        // // loop through any new collected samples
-        int highest = 0;
+
+        // int16_t filtered_data[5];
+        // for (int i = 0; i < BUFFER_SIZE; i += 5) {
+        //     filtered_data[i / 5] = moving_average(sample_buffer + i, 5);
+        // }
+
+        // // Print the filtered data to the console.
+        // for (int i = 0; i < 5; i++) {
+        //     printf("%d\n", filtered_data[i]);
+        // }
+        
+        loop through any new collected samples
         for (int i = 0; i < sample_count; i++) {
-            if(abs(sample_buffer[i]) > SAMPLES_THRESH){
-                num_over++;
-                if(num_over > SAMPLES_OVER_THRESH && !printed){
-                    printf("%" PRIu64 ",GOT ONE %d\n",get_time_us(),i);
-                    printed = true;
-                    // printf to
-                }
-                highest = num_over>highest?num_over:highest;
-            }
-            else{
-                num_over = 0;
-                printed=false;
-            }
-        }
-        //good for debugging the threshold settings
-        // if(highest)printf("%d best\n",highest);
-        if(samples_read != 0){
-            printf("BUFFER CORRUPTION DETECTED\n");
+            printf("%d\n", sample_buffer[i]);
         }
     }
 
