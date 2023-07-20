@@ -17,8 +17,8 @@
 #include "tusb.h"
 #define SAMPLE_RATE 80000
 #define SAMPLE_BUFFER_SIZE SAMPLE_RATE/100
-#define SAMPLES_OVER_THRESH 10
-#define SAMPLES_THRESH 10000
+#define SAMPLES_OVER_THRESH 20
+#define SAMPLES_THRESH 9000
 // configuration
 const struct pdm_microphone_config config = {
     // GPIO pin for the PDM DAT signal
@@ -101,12 +101,12 @@ int main( void )
         // // loop through any new collected samples
         int highest = 0;
         for (int i = 0; i < sample_count; i++) {
+            
             if(abs(sample_buffer[i]) > SAMPLES_THRESH){
                 num_over++;
                 if(num_over > SAMPLES_OVER_THRESH && !printed){
                     printf("%" PRIu64 ",GOT ONE %d\n",get_time_us(),i);
                     printed = true;
-                    // printf to
                 }
                 highest = num_over>highest?num_over:highest;
             }
