@@ -44,42 +44,42 @@ const struct pdm_microphone_config config1 = {
     .sample_buffer_size = SAMPLE_BUFFER_SIZE,
 };
 
-// // // second microphone config
-// // const struct pdm_microphone_config config2 = {
-// //     // GPIO pin for the PDM DAT signal
-// //     .gpio_data = 4,
+// second microphone config
+const struct pdm_microphone_config config2 = {
+    // GPIO pin for the PDM DAT signal
+    .gpio_data = 4,
 
-// //     // GPIO pin for the PDM CLK signal
-// //     .gpio_clk = 5,
+    // GPIO pin for the PDM CLK signal
+    .gpio_clk = 5,
 
-// //     // PIO instance to use
-// //     .pio = pio0,
+    // PIO instance to use
+    .pio = pio0,
 
-// //     // PIO State Machine instance to use
-// //     .pio_sm = 1,
+    // PIO State Machine instance to use
+    .pio_sm = 1,
 
-// //     // sample rate in Hz
-// //     .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
+    // sample rate in Hz
+    .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
 
-// //     // number of samples to buffer
-// //     .sample_buffer_size = SAMPLE_BUFFER_SIZE,
-// // };
+    // number of samples to buffer
+    .sample_buffer_size = SAMPLE_BUFFER_SIZE,
+};
 
-// // third microphone config
-// const struct pdm_microphone_config config3 = {
-//     // GPIO pin for the PDM DAT signal
-//     .gpio_data = 6,
-//     // GPIO pin for the PDM CLK signal
-//     .gpio_clk = 7,
-//     // PIO instance to use
-//     .pio = pio0,
-//     // PIO State Machine instance to use
-//     .pio_sm = 1,
-//     // sample rate in Hz
-//     .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
-//     // number of samples to buffer
-//     .sample_buffer_size = SAMPLE_BUFFER_SIZE,
-// };
+// third microphone config
+const struct pdm_microphone_config config3 = {
+    // GPIO pin for the PDM DAT signal
+    .gpio_data = 6,
+    // GPIO pin for the PDM CLK signal
+    .gpio_clk = 7,
+    // PIO instance to use
+    .pio = pio0,
+    // PIO State Machine instance to use
+    .pio_sm = 1,
+    // sample rate in Hz
+    .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
+    // number of samples to buffer
+    .sample_buffer_size = SAMPLE_BUFFER_SIZE,
+};
 
 // get time from internal clock in us
 uint64_t get_time_us()
@@ -88,14 +88,16 @@ uint64_t get_time_us()
 }
 
 // variables
-int16_t sample_buffer[SAMPLE_BUFFER_SIZE];
+int16_t sample_buffer1[SAMPLE_BUFFER_SIZE];
+int16_t sample_buffer2[SAMPLE_BUFFER_SIZE];
+int16_t sample_buffer3[SAMPLE_BUFFER_SIZE];
 volatile int samples_read = 0;
 
 void on_pdm_samples_ready()
 {
     // callback from library when all the samples in the library
     // internal sample buffer are ready for reading 
-    samples_read = pdm_microphone_read(sample_buffer, SAMPLE_BUFFER_SIZE);
+    samples_read = pdm_microphone_read(sample_buffer1, SAMPLE_BUFFER_SIZE);
 }
 void software_reset()
 {
@@ -104,18 +106,18 @@ void software_reset()
 }
 
 // turn off the clock for three state machines
-// void pdm_microphone_data_disable(PIO pio, uint sm, uint sm2, uint sm3) {
-//     pio_sm_set_enabled(pio, sm, false);
-//     pio_sm_set_enabled(pio, sm2, false);
-//     pio_sm_set_enabled(pio, sm3, false);
-// } 
+void pdm_microphone_data_disable(PIO pio, uint sm, uint sm2, uint sm3) {
+    pio_sm_set_enabled(pio, sm, false);
+    pio_sm_set_enabled(pio, sm2, false);
+    pio_sm_set_enabled(pio, sm3, false);
+} 
 
-// // turn on the clock for three state machines
-// void pdm_microphone_data_enable(PIO pio, uint sm, uint sm2, uint sm3) { 
-//     pio_sm_set_enabled(pio, sm, true);
-//     pio_sm_set_enabled(pio, sm2, true);
-//     pio_sm_set_enabled(pio, sm3, true);
-// }
+// turn on the clock for three state machines
+void pdm_microphone_data_enable(PIO pio, uint sm, uint sm2, uint sm3) { 
+    pio_sm_set_enabled(pio, sm, true);
+    pio_sm_set_enabled(pio, sm2, true);
+    pio_sm_set_enabled(pio, sm3, true);
+}
 
 int main( void )
 {
@@ -161,6 +163,8 @@ int main( void )
 
     int num_over = 0;
     bool printed = false;
+    int global_samples = 0;
+    uint32_t peak_sample_num = 0;
 
     uint64_t time_now = 0;
     uint64_t time_last = 0;
@@ -175,18 +179,26 @@ int main( void )
         int sample_count = samples_read;
         samples_read = 0;
         // printf("Got %d samples\n",sample_count);
-        // // loop through any new collected samples
+
+        // loop through any new collected samples
         int highest = 0;
         for (int i = 0; i < sample_count; i++) { // loop through all the samples in the buffer that we've collected
+            global_samples++;                    
             
             // we stay in this if statement as long as large values are coming in consecutively
-            if(abs(sample_buffer[i]) > AMPLITUDE_THRESH){           // if this one sample is over the threshold...
-                num_over++;                                         // increment the number of consecutive samples over the threshold
+            if(abs(sample_buffer1[i]) > AMPLITUDE_THRESH){          // if this one sample is over the threshold...
+                num_over++;                                                    // increment the number of consecutive samples over the threshold
                 if(num_over > SAMPLES_OVER_THRESH && !printed){     // if we've been over the threshold for enough consecutive samples and haven't printed yet
                     // printf("%" PRIu64 ",GOT ONE %d\n",get_time_us(),i);
                     printed = true;
                 }
-                highest = num_over>highest?num_over:highest;        // peak detector
+
+                // convert ternary to if statement
+                if(num_over>highest){                               // peak detector
+                    highest = num_over;
+                    peak_sample_num = global_samples;               // only update the peak sample number if we have a new peak
+                    // printf("global_samples: %d\n",global_samples);           // DEBUG
+                }
             }
             else { // if the sample is under the threshold
                 num_over = 0; // reset the number of samples over the threshold 
@@ -199,14 +211,12 @@ int main( void )
             
             // WE DETECTED!!!
             count++;
-            
             time_now = get_time_us();
 
             // this is the holdoff time, so we don't print too many events (debouncer)
             if(time_now - time_last > HOLDOFF_TIME_US){
-                printf("%" PRIu64 "GOT ONE: best %d,%d\n",time_now,highest,count);
+                printf("\tBOUNCE: %"PRIu64" %d, %d\n",time_now,highest,peak_sample_num);
                 time_last = time_now;
-
             }
         }
 
