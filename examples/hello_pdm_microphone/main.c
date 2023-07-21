@@ -24,7 +24,7 @@
 
 // configuration
 // first microphone config
-const struct pdm_microphone_config config1 = {
+const struct pdm_microphone_config config0 = {
     // GPIO pin for the PDM DAT signal
     .gpio_data = 2,
 
@@ -44,42 +44,37 @@ const struct pdm_microphone_config config1 = {
     .sample_buffer_size = SAMPLE_BUFFER_SIZE,
 };
 
-// second microphone config
-const struct pdm_microphone_config config2 = {
-    // GPIO pin for the PDM DAT signal
-    .gpio_data = 4,
+// // second microphone config
+// const struct pdm_microphone_config config2 = {
+//     // GPIO pin for the PDM DAT signal
+//     .gpio_data = 4,
+//     // GPIO pin for the PDM CLK signal
+//     .gpio_clk = 5,
+//     // PIO instance to use
+//     .pio = pio0,
+//     // PIO State Machine instance to use
+//     .pio_sm = 1,
+//     // sample rate in Hz
+//     .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
+//     // number of samples to buffer
+//     .sample_buffer_size = SAMPLE_BUFFER_SIZE,
+// };
 
-    // GPIO pin for the PDM CLK signal
-    .gpio_clk = 5,
-
-    // PIO instance to use
-    .pio = pio0,
-
-    // PIO State Machine instance to use
-    .pio_sm = 1,
-
-    // sample rate in Hz
-    .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
-
-    // number of samples to buffer
-    .sample_buffer_size = SAMPLE_BUFFER_SIZE,
-};
-
-// third microphone config
-const struct pdm_microphone_config config3 = {
-    // GPIO pin for the PDM DAT signal
-    .gpio_data = 6,
-    // GPIO pin for the PDM CLK signal
-    .gpio_clk = 7,
-    // PIO instance to use
-    .pio = pio0,
-    // PIO State Machine instance to use
-    .pio_sm = 1,
-    // sample rate in Hz
-    .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
-    // number of samples to buffer
-    .sample_buffer_size = SAMPLE_BUFFER_SIZE,
-};
+// // third microphone config
+// const struct pdm_microphone_config config3 = {
+//     // GPIO pin for the PDM DAT signal
+//     .gpio_data = 6,
+//     // GPIO pin for the PDM CLK signal
+//     .gpio_clk = 7,
+//     // PIO instance to use
+//     .pio = pio0,
+//     // PIO State Machine instance to use
+//     .pio_sm = 1,
+//     // sample rate in Hz
+//     .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
+//     // number of samples to buffer
+//     .sample_buffer_size = SAMPLE_BUFFER_SIZE,
+// };
 
 // get time from internal clock in us
 uint64_t get_time_us()
@@ -89,16 +84,17 @@ uint64_t get_time_us()
 
 // variables
 int16_t sample_buffer1[SAMPLE_BUFFER_SIZE];
-int16_t sample_buffer2[SAMPLE_BUFFER_SIZE];
-int16_t sample_buffer3[SAMPLE_BUFFER_SIZE];
 volatile int samples_read = 0;
+
+int thisMic = 0;        // which microphone we're using (starting with 0)
 
 void on_pdm_samples_ready()
 {
     // callback from library when all the samples in the library
     // internal sample buffer are ready for reading 
-    samples_read = pdm_microphone_read(sample_buffer1, SAMPLE_BUFFER_SIZE);
+    samples_read = pdm_microphone_read(sample_buffer1, SAMPLE_BUFFER_SIZE, thisMic);
 }
+
 void software_reset()
 {
     watchdog_enable(1, 1);
@@ -129,12 +125,9 @@ int main( void )
 
     printf("hello PDM microphone\n");
 
-    // disable all three state machines
-    // pdm_microphone_data_disable(config1.pio, config1.pio_sm, config2.pio_sm, config3.pio_sm);
-
-    // initialize the first PDM microphone
-    if (pdm_microphone_init(&config1) < 0) {
-        printf("PDM microphone 1 initialization failed!\n");
+    // initialize the PDM microphone object
+    if (pdm_microphone_init(&config0,thisMic) < 0) {
+        printf("PDM microphone 1 initialization failed!\n"); 
         software_reset();
     }
 
@@ -150,14 +143,13 @@ int main( void )
     //     software_reset();
     // }
 
-
     // set callback that is called when all the samples in the library
     // internal sample buffer are ready for reading
-    pdm_microphone_set_samples_ready_handler(on_pdm_samples_ready);
+    pdm_microphone_set_samples_ready_handler(on_pdm_samples_ready,thisMic);
     
      // start capturing data from the PDM microphone
-    if (pdm_microphone_start() < 0) {
-        printf("PDM microphone start failed!\n");
+    if (pdm_microphone_start(0) < 0) {
+        printf("PDM microphone start failed!\n"); // this was fine
         software_reset();
     }
 
@@ -173,12 +165,12 @@ int main( void )
 
     while (1) {
         // wait for new samples
-        while (samples_read == 0) { tight_loop_contents(); }
+        while (samples_read == 0) { tight_loop_contents();}
 
         // store and clear the samples read from the callback
         int sample_count = samples_read;
         samples_read = 0;
-        // printf("Got %d samples\n",sample_count);
+        printf("Got %d samples\n",sample_count);
 
         // loop through any new collected samples
         int highest = 0;
