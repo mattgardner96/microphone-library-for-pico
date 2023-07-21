@@ -18,8 +18,8 @@
 #define SAMPLE_RATE 80000
 #define SAMPLE_BUFFER_SIZE SAMPLE_RATE/100
 #define SAMPLES_OVER_THRESH 25
-#define PEAK_DETECTOR_HEIGHT 15
-#define AMPLITUDE_THRESH 9000
+#define PEAK_DETECTOR_HEIGHT 20
+#define AMPLITUDE_THRESH 10000
 
 // configuration
 // first microphone config
