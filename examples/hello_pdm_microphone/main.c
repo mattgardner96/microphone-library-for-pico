@@ -20,6 +20,7 @@
 #define SAMPLES_OVER_THRESH 25
 #define PEAK_DETECTOR_HEIGHT 20
 #define AMPLITUDE_THRESH 10000
+#define HOLDOFF_TIME_US 50000 // 2ms
 
 // configuration
 // first microphone config
@@ -161,6 +162,11 @@ int main( void )
     int num_over = 0;
     bool printed = false;
 
+    uint64_t time_now = 0;
+    uint64_t time_last = 0;
+
+    int count = 0;
+
     while (1) {
         // wait for new samples
         while (samples_read == 0) { tight_loop_contents(); }
@@ -190,7 +196,18 @@ int main( void )
     
         // this is printing the peak reading over the threshold, which there's only one of per event
         if(highest>PEAK_DETECTOR_HEIGHT) {
-            printf("%" PRIu64 "GOT ONE: best %d\n",get_time_us(),highest);
+            
+            // WE DETECTED!!!
+            count++;
+            
+            time_now = get_time_us();
+
+            // this is the holdoff time, so we don't print too many events (debouncer)
+            if(time_now - time_last > HOLDOFF_TIME_US){
+                printf("%" PRIu64 "GOT ONE: best %d,%d\n",time_now,highest,count);
+                time_last = time_now;
+
+            }
         }
 
         //good for debugging the threshold settings
