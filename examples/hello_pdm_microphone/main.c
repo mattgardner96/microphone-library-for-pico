@@ -17,10 +17,13 @@
 #include "tusb.h"
 #define SAMPLE_RATE 80000
 #define SAMPLE_BUFFER_SIZE SAMPLE_RATE/100
-#define SAMPLES_OVER_THRESH 20
-#define SAMPLES_THRESH 9000
+#define SAMPLES_OVER_THRESH 25
+#define PEAK_DETECTOR_HEIGHT 15
+#define AMPLITUDE_THRESH 9000
+
 // configuration
-const struct pdm_microphone_config config = {
+// first microphone config
+const struct pdm_microphone_config config1 = {
     // GPIO pin for the PDM DAT signal
     .gpio_data = 2,
 
@@ -40,6 +43,42 @@ const struct pdm_microphone_config config = {
     .sample_buffer_size = SAMPLE_BUFFER_SIZE,
 };
 
+// // // second microphone config
+// // const struct pdm_microphone_config config2 = {
+// //     // GPIO pin for the PDM DAT signal
+// //     .gpio_data = 4,
+
+// //     // GPIO pin for the PDM CLK signal
+// //     .gpio_clk = 5,
+
+// //     // PIO instance to use
+// //     .pio = pio0,
+
+// //     // PIO State Machine instance to use
+// //     .pio_sm = 1,
+
+// //     // sample rate in Hz
+// //     .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
+
+// //     // number of samples to buffer
+// //     .sample_buffer_size = SAMPLE_BUFFER_SIZE,
+// // };
+
+// // third microphone config
+// const struct pdm_microphone_config config3 = {
+//     // GPIO pin for the PDM DAT signal
+//     .gpio_data = 6,
+//     // GPIO pin for the PDM CLK signal
+//     .gpio_clk = 7,
+//     // PIO instance to use
+//     .pio = pio0,
+//     // PIO State Machine instance to use
+//     .pio_sm = 1,
+//     // sample rate in Hz
+//     .sample_rate = SAMPLE_RATE,//just at 5MHz PDM clock I think
+//     // number of samples to buffer
+//     .sample_buffer_size = SAMPLE_BUFFER_SIZE,
+// };
 
 // get time from internal clock in us
 uint64_t get_time_us()
@@ -63,6 +102,20 @@ void software_reset()
     while(1);
 }
 
+// turn off the clock for three state machines
+// void pdm_microphone_data_disable(PIO pio, uint sm, uint sm2, uint sm3) {
+//     pio_sm_set_enabled(pio, sm, false);
+//     pio_sm_set_enabled(pio, sm2, false);
+//     pio_sm_set_enabled(pio, sm3, false);
+// } 
+
+// // turn on the clock for three state machines
+// void pdm_microphone_data_enable(PIO pio, uint sm, uint sm2, uint sm3) { 
+//     pio_sm_set_enabled(pio, sm, true);
+//     pio_sm_set_enabled(pio, sm2, true);
+//     pio_sm_set_enabled(pio, sm3, true);
+// }
+
 int main( void )
 {
     // initialize stdio and wait for USB CDC connect
@@ -73,11 +126,27 @@ int main( void )
 
     printf("hello PDM microphone\n");
 
-    // initialize the PDM microphone
-    if (pdm_microphone_init(&config) < 0) {
-        printf("PDM microphone initialization failed!\n");
+    // disable all three state machines
+    // pdm_microphone_data_disable(config1.pio, config1.pio_sm, config2.pio_sm, config3.pio_sm);
+
+    // initialize the first PDM microphone
+    if (pdm_microphone_init(&config1) < 0) {
+        printf("PDM microphone 1 initialization failed!\n");
         software_reset();
     }
+
+    // // initialize the second PDM microphone
+    // if (pdm_microphone_init(&config2) < 0) {
+    //     printf("PDM microphone 2 initialization failed!\n");
+    //     software_reset();
+    // }
+
+    // // initialize the third PDM microphone
+    // if (pdm_microphone_init(&config3) < 0) {
+    //     printf("PDM microphone 3 initialization failed!\n");
+    //     software_reset();
+    // }
+
 
     // set callback that is called when all the samples in the library
     // internal sample buffer are ready for reading
@@ -88,8 +157,10 @@ int main( void )
         printf("PDM microphone start failed!\n");
         software_reset();
     }
+
     int num_over = 0;
     bool printed = false;
+
     while (1) {
         // wait for new samples
         while (samples_read == 0) { tight_loop_contents(); }
@@ -100,27 +171,36 @@ int main( void )
         // printf("Got %d samples\n",sample_count);
         // // loop through any new collected samples
         int highest = 0;
-        for (int i = 0; i < sample_count; i++) {
+        for (int i = 0; i < sample_count; i++) { // loop through all the samples in the buffer that we've collected
             
-            if(abs(sample_buffer[i]) > SAMPLES_THRESH){
-                num_over++;
-                if(num_over > SAMPLES_OVER_THRESH && !printed){
-                    printf("%" PRIu64 ",GOT ONE %d\n",get_time_us(),i);
+            // we stay in this if statement as long as large values are coming in consecutively
+            if(abs(sample_buffer[i]) > AMPLITUDE_THRESH){           // if this one sample is over the threshold...
+                num_over++;                                         // increment the number of consecutive samples over the threshold
+                if(num_over > SAMPLES_OVER_THRESH && !printed){     // if we've been over the threshold for enough consecutive samples and haven't printed yet
+                    // printf("%" PRIu64 ",GOT ONE %d\n",get_time_us(),i);
                     printed = true;
                 }
-                highest = num_over>highest?num_over:highest;
+                highest = num_over>highest?num_over:highest;        // peak detector
             }
-            else{
-                num_over = 0;
+            else { // if the sample is under the threshold
+                num_over = 0; // reset the number of samples over the threshold 
                 printed=false;
             }
         }
+    
+        // this is printing the peak reading over the threshold, which there's only one of per event
+        if(highest>PEAK_DETECTOR_HEIGHT) {
+            printf("%" PRIu64 "GOT ONE: best %d\n",get_time_us(),highest);
+        }
+
         //good for debugging the threshold settings
         // if(highest)printf("%d best\n",highest);
+
         if(samples_read != 0){
             printf("BUFFER CORRUPTION DETECTED\n");
         }
-    }
+    } // end while(1)
 
     return 0;
-}
+} // end main
+
