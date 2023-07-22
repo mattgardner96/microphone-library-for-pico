@@ -23,6 +23,9 @@
 #define SAMPLE_BUFFER_SIZE SAMPLE_RATE/100
 #define PEAK_DETECTOR_HEIGHT 30
 #define AMPLITUDE_THRESH 12000
+#define N_SAMPLES 5
+#define SUM_THRESH 20000
+#define DEBOUNCE_SAMPLES 10000
 
 // configuration
 // first microphone config
@@ -133,6 +136,9 @@ void pdm_microphone_data_enable(PIO pio, uint sm, uint sm2, uint sm3) {
 
 void process_samples(int mic_num){
     static uint32_t global_samples[3] = {0};
+    static int16_t old_samples_buffer[3][N_SAMPLES] = {0};
+    static uint32_t sums[3] = {0};
+    static uint32_t last_bounce[3] = {0};
 
     bool printed = false;
     uint32_t peak_sample_num = 0;
@@ -151,28 +157,32 @@ void process_samples(int mic_num){
     // }
     // printf("\n");
     // loop through any new collected samples
-    int highest = 0;
-    for (int i = 0; i < sample_count; i++) { // loop through all the samples in the buffer that we've collected
+    bool bounced = false;
+    for (int i =0; i < N_SAMPLES; i++){
         global_samples[mic_num]+=1;
-        // we stay in this if statement as long as large values are coming in consecutively
-        if(abs(sample_buffer[mic_num][i]) > AMPLITUDE_THRESH){          // if this one sample is over the threshold...
-            num_over++;                                                    // increment the number of consecutive samples over the threshold
-
-            // convert ternary to if statement
-            if(num_over>highest){                               // peak detector
-                highest = num_over;
-                peak_sample_num = global_samples[mic_num];               // only update the peak sample number if we have a new peak
-                // printf("global_samples: %d\n",global_samples);           // DEBUG
+        sums[mic_num] += abs(sample_buffer[mic_num][i]);
+        sums[mic_num] -= abs(ld_samples_buffer[mic_num][i]);
+        if(sums[mic_num] > SUM_THRESH*N_SAMPLES){//detected!
+            if((global_samples[mic_num]-last_bounce[mic_num])>DEBOUNCE_SAMPLES){
+                last_bounce[mic_num] = global_samples[mic_num];
+                bounced = true;
             }
-        }
-        else { // if the sample is under the threshold
-            num_over = 0; // reset the number of samples over the threshold 
-            printed=false;
-        }
+        }   
+    }
+    for (int i = N_SAMPLES; i < sample_count; i++) { // loop through all the samples in the buffer that we've collected
+        global_samples[mic_num]+=1;
+        sums[mic_num] += abs(sample_buffer[mic_num][i]);
+        sums[mic_num] -= abs(sample_buffer[mic_num][i-N_SAMPLES]);
+        if(sums[mic_num] > SUM_THRESH*N_SAMPLES){//detected!
+            if((global_samples[mic_num]-last_bounce[mic_num])>DEBOUNCE_SAMPLES){
+                last_bounce[mic_num] = global_samples[mic_num];
+                bounced = true;
+            }
+        }    
     }
 
-    if(highest>PEAK_DETECTOR_HEIGHT) {
-        printf("\tBOUNCE: %d %"PRIu64" %d, %d\n",mic_num,time_now,highest,peak_sample_num);
+    if(bounced) {
+        printf("\tBOUNCE: %d %d\n",mic_num,last_bounce[mic_num]);
     }
 
     // good for debugging the threshold settings
