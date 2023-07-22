@@ -19,10 +19,10 @@
 #include "hardware/watchdog.h"
 #include "tusb.h"
 
-#define SAMPLE_RATE 40000
+#define SAMPLE_RATE 48000
 #define SAMPLE_BUFFER_SIZE SAMPLE_RATE/100
-#define PEAK_DETECTOR_HEIGHT 40
-#define AMPLITUDE_THRESH 8000
+#define PEAK_DETECTOR_HEIGHT 30
+#define AMPLITUDE_THRESH 12000
 
 // configuration
 // first microphone config
@@ -124,14 +124,15 @@ void pdm_microphone_data_enable(PIO pio, uint sm, uint sm2, uint sm3) {
     check_sm_param(sm);
     check_sm_param(sm2);
     check_sm_param(sm3);
-    pio_sm_set_enabled(pio,sm3,true);
-    pio_sm_set_enabled(pio,sm2,true);
-    pio_sm_set_enabled(pio,sm,true);
+    // pio_sm_set_enabled(pio,sm3,true);
+    // pio_sm_set_enabled(pio,sm2,true);
+    // pio_sm_set_enabled(pio,sm,true);
+    pio->ctrl |= 0b0111;
 }
 
 
 void process_samples(int mic_num){
-    static uint64_t global_samples[3] = {0};
+    static uint32_t global_samples[3] = {0};
 
     bool printed = false;
     uint32_t peak_sample_num = 0;
@@ -144,7 +145,11 @@ void process_samples(int mic_num){
     int sample_count = samples_read[mic_num];
     samples_read[mic_num] = 0;
     // printf("Got %d samples on %d\n",sample_count, mic_num);
-
+    // printf("%d ",mic_num);
+    // for (int i = 0; i < sample_count; i++) { // loop through all the samples in the buffer that we've collected
+    //     printf("%d ",*((uint16_t*)&sample_buffer[mic_num][i]));
+    // }
+    // printf("\n");
     // loop through any new collected samples
     int highest = 0;
     for (int i = 0; i < sample_count; i++) { // loop through all the samples in the buffer that we've collected
@@ -166,17 +171,17 @@ void process_samples(int mic_num){
         }
     }
 
-    // this is printing the peak reading over the threshold, which there's only one of per event
     if(highest>PEAK_DETECTOR_HEIGHT) {
         printf("\tBOUNCE: %d %"PRIu64" %d, %d\n",mic_num,time_now,highest,peak_sample_num);
     }
 
     // good for debugging the threshold settings
-    if(highest)printf("%d best\n",highest);
+    // if(highest)printf("%d best\n",highest);
 
     if(samples_read[mic_num] != 0){
         printf("BUFFER CORRUPTION DETECTED\n");
     }
+    // printf("SAMPS %lu %lu %lu\n",global_samples[0],global_samples[1],global_samples[2]);
 }
 void core1_entry() {
     while (1) {
