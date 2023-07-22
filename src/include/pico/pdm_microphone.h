@@ -53,6 +53,6 @@ void pdm_microphone_set_filter_gain(uint8_t gain,int mic_num);
 void pdm_microphone_set_filter_volume(uint16_t volume,int mic_num);
 
 int pdm_microphone_read(int16_t* buffer, size_t samples,int mic_num);
-extern void pdm_dma_handler(int mic_num);
+extern void pdm_dma_handler();
 
 #endif

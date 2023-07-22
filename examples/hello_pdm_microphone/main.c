@@ -19,12 +19,10 @@
 #include "hardware/watchdog.h"
 #include "tusb.h"
 
-#define SAMPLE_RATE 80000
+#define SAMPLE_RATE 40000
 #define SAMPLE_BUFFER_SIZE SAMPLE_RATE/100
-#define SAMPLES_OVER_THRESH 25
-#define PEAK_DETECTOR_HEIGHT 20
-#define AMPLITUDE_THRESH 10000
-#define HOLDOFF_TIME_US 50000 // 2ms
+#define PEAK_DETECTOR_HEIGHT 40
+#define AMPLITUDE_THRESH 8000
 
 // configuration
 // first microphone config
@@ -93,6 +91,7 @@ void on_pdm_samples_ready(int mic_num)
 {
     // callback from library when all the samples in the library
     // internal sample buffer are ready for reading 
+    // printf("SAMPLES %d\n",mic_num);
     samples_read[mic_num] = pdm_microphone_read(sample_buffer[mic_num], SAMPLE_BUFFER_SIZE, mic_num);
 }
 void on_pdm_samples_ready0(){
@@ -126,22 +125,11 @@ void pdm_microphone_data_enable(PIO pio, uint sm, uint sm2, uint sm3) {
     check_sm_param(sm2);
     check_sm_param(sm3);
     pio_sm_set_enabled(pio,sm3,true);
+    pio_sm_set_enabled(pio,sm2,true);
     pio_sm_set_enabled(pio,sm,true);
-    // pio->ctrl = ((pio->ctrl & ~(1u << sm)) | (bool_to_bit(1) << sm)) || ((pio->ctrl & ~(1u << sm2)) | (bool_to_bit(1) << sm2)) || ((pio->ctrl & ~(1u << sm3)) | (bool_to_bit(1) << sm3));
 }
 
-void core1_entry() {
-    uint16_t sample_count = 0;
-    pdm_mic[2].raw_buffer_write_index = 0;
-    while (1){
-        uint32_t word = pio_sm_get_blocking(config2.pio,config2.pio_sm);
-        pdm_mic[2].raw_buffer[pdm_mic[2].raw_buffer_write_index][sample_count] = word &0x00FF;
-        sample_count = ((sample_count+1) % (pdm_mic[2].raw_buffer_size));
-        if(sample_count==0){
-            pdm_dma_handler(2);
-        }
-    }
-}
+
 void process_samples(int mic_num){
     static uint64_t global_samples[3] = {0};
 
@@ -155,7 +143,7 @@ void process_samples(int mic_num){
     // store and clear the samples read from the callback
     int sample_count = samples_read[mic_num];
     samples_read[mic_num] = 0;
-    printf("Got %d samples on %d\n",sample_count, mic_num);
+    // printf("Got %d samples on %d\n",sample_count, mic_num);
 
     // loop through any new collected samples
     int highest = 0;
@@ -164,10 +152,6 @@ void process_samples(int mic_num){
         // we stay in this if statement as long as large values are coming in consecutively
         if(abs(sample_buffer[mic_num][i]) > AMPLITUDE_THRESH){          // if this one sample is over the threshold...
             num_over++;                                                    // increment the number of consecutive samples over the threshold
-            if(num_over > SAMPLES_OVER_THRESH && !printed){     // if we've been over the threshold for enough consecutive samples and haven't printed yet
-                // printf("%" PRIu64 ",GOT ONE %d\n",get_time_us(),i);
-                printed = true;
-            }
 
             // convert ternary to if statement
             if(num_over>highest){                               // peak detector
@@ -184,24 +168,25 @@ void process_samples(int mic_num){
 
     // this is printing the peak reading over the threshold, which there's only one of per event
     if(highest>PEAK_DETECTOR_HEIGHT) {
-        
-        // WE DETECTED!!!
-        count++;
-        time_now = get_time_us();
-
-        // this is the holdoff time, so we don't print too many events (debouncer)
-        if(time_now - time_last > HOLDOFF_TIME_US){
-            printf("\tBOUNCE: %d %"PRIu64" %d, %d\n",mic_num,time_now,highest,peak_sample_num);
-            time_last = time_now;
-        }
+        printf("\tBOUNCE: %d %"PRIu64" %d, %d\n",mic_num,time_now,highest,peak_sample_num);
     }
 
-    //good for debugging the threshold settings
-    // if(highest)printf("%d best\n",highest);
+    // good for debugging the threshold settings
+    if(highest)printf("%d best\n",highest);
 
     if(samples_read[mic_num] != 0){
         printf("BUFFER CORRUPTION DETECTED\n");
     }
+}
+void core1_entry() {
+    while (1) {
+        // wait for new samples
+        for(int buffer_index = 0; buffer_index < 3; buffer_index++){
+            if (samples_read[buffer_index] != 0){
+                process_samples(buffer_index);
+            }
+        }
+    } // end while(1)
 }
 int main( void )
 {
@@ -217,7 +202,7 @@ int main( void )
         software_reset();
     }
 
-    // // // initialize the second PDM microphone
+    // // initialize the second PDM microphone
     if (pdm_microphone_init(&config1,1) < 0) {
         printf("PDM microphone 2 initialization failed!\n");
         software_reset();
@@ -252,14 +237,7 @@ int main( void )
     multicore_launch_core1(core1_entry);
     pdm_microphone_data_enable(config0.pio,config0.pio_sm,config1.pio_sm,config2.pio_sm);
 
-    while (1) {
-        // wait for new samples
-        for(int buffer_index = 0; buffer_index < 3; buffer_index++){
-            if (samples_read[buffer_index] != 0){
-                process_samples(buffer_index);
-            }
-        }
-    } // end while(1)
+    while(1){tight_loop_contents();}
 
     return 0;
 } // end main
