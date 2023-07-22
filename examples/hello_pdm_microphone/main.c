@@ -161,7 +161,7 @@ void process_samples(int mic_num){
     for (int i =0; i < N_SAMPLES; i++){
         global_samples[mic_num]+=1;
         sums[mic_num] += abs(sample_buffer[mic_num][i]);
-        sums[mic_num] -= abs(ld_samples_buffer[mic_num][i]);
+        sums[mic_num] -= abs(old_samples_buffer[mic_num][i]);
         if(sums[mic_num] > SUM_THRESH*N_SAMPLES){//detected!
             if((global_samples[mic_num]-last_bounce[mic_num])>DEBOUNCE_SAMPLES){
                 last_bounce[mic_num] = global_samples[mic_num];
@@ -180,6 +180,7 @@ void process_samples(int mic_num){
             }
         }    
     }
+    memcpy(old_samples_buffer[mic_num],sample_buffer[mic_num]+sample_count-N_SAMPLES,N_SAMPLES);
 
     if(bounced) {
         printf("\tBOUNCE: %d %d\n",mic_num,last_bounce[mic_num]);
