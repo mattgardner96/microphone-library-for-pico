@@ -5,7 +5,7 @@ add_executable(hello_pdm_microphone
     main.c
 )
 
-target_link_libraries(hello_pdm_microphone pico_pdm_microphone)
+target_link_libraries(hello_pdm_microphone pico_pdm_microphone pico_multicore pico_stdlib)
 
 # enable usb output, disable uart output
 pico_enable_stdio_usb(hello_pdm_microphone 1)

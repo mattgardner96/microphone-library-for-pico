@@ -2,6 +2,11 @@
     "files.associations": {
         "pio.h": "c",
         "usb_microphone.h": "c",
-        "tusb.h": "c"
+        "tusb.h": "c",
+        "pdm_microphone.h": "c",
+        "openpdmfilter.h": "c",
+        "math.h": "c",
+        "multicore.h": "c",
+        "watchdog.h": "c"
     }
 }
