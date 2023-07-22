@@ -137,7 +137,6 @@ void core1_entry() {
         uint32_t word = pio_sm_get_blocking(config2.pio,config2.pio_sm);
         pdm_mic[2].raw_buffer[pdm_mic[2].raw_buffer_write_index][sample_count] = word &0x00FF;
         sample_count = ((sample_count+1) % (pdm_mic[2].raw_buffer_size));
-        
         if(sample_count==0){
             pdm_dma_handler(2);
         }
@@ -218,7 +217,7 @@ int main( void )
         software_reset();
     }
 
-    // // initialize the second PDM microphone
+    // // // initialize the second PDM microphone
     if (pdm_microphone_init(&config1,1) < 0) {
         printf("PDM microphone 2 initialization failed!\n");
         software_reset();
